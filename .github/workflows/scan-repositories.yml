@@ -1,0 +1,82 @@
+name: Scan GitHub for ioBroker Repositories
+
+on:
+  schedule:
+    # Run every Sunday at 2:00 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      search_query:
+        description: 'Custom search query (default: "iobroker in:name")'
+        required: false
+        default: 'iobroker in:name'
+        type: string
+      additional_qualifiers:
+        description: 'Additional search qualifiers (e.g., "language:javascript stars:>5")'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Dry run mode (do not commit changes)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  scan-repositories:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm install
+        
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+      - name: Run repository scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEARCH_QUERY: ${{ github.event.inputs.search_query || 'iobroker in:name' }}
+          ADDITIONAL_QUALIFIERS: ${{ github.event.inputs.additional_qualifiers || '' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "Running scanner with query: $SEARCH_QUERY"
+          if [ -n "$ADDITIONAL_QUALIFIERS" ]; then
+            echo "Additional qualifiers: $ADDITIONAL_QUALIFIERS"
+          fi
+          
+          node scripts/scanGithub.js
+          
+      - name: Commit and push changes
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git add ioBrokerRepositories.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update ioBroker repositories scan results"
+            git push
+          fi
+          
+      - name: Upload scan results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iobroker-repositories-${{ github.run_number }}
+          path: ioBrokerRepositories.json
+          retention-days: 30

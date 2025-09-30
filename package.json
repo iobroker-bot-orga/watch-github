@@ -1,0 +1,21 @@
+{
+  "name": "watch-github",
+  "version": "1.0.0",
+  "description": "This repository watches github for ioBroker adapter repositories",
+  "main": "index.js",
+  "scripts": {
+    "scan": "node scripts/scanGithub.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "keywords": [
+    "iobroker",
+    "github",
+    "adapter",
+    "scanner"
+  ],
+  "author": "ioBroker Check and Service-Bot Organisation",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/rest": "^20.0.2"
+  }
+}
