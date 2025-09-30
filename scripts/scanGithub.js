@@ -247,13 +247,16 @@ class GitHubScanner {
         const baseQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
         const additionalQualifiers = process.env.ADDITIONAL_QUALIFIERS || '';
         
+        // Include archived and forked repositories explicitly
+        const includeArchivedAndForked = 'fork:true archived:true';
+        
         const strategies = [];
         const currentYear = new Date().getFullYear();
         const startYear = 2014;
         
         // Generate year-based search strategies from current year down to 2014
         for (let year = currentYear; year >= startYear; year--) {
-            const yearQuery = `${baseQuery} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
+            const yearQuery = `${baseQuery} ${includeArchivedAndForked} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
             strategies.push({
                 query: yearQuery,
                 description: `Repositories created in ${year}`,
@@ -330,6 +333,9 @@ class GitHubScanner {
         const year = yearStrategy.year;
         const allRepositories = [];
         
+        // Include archived and forked repositories explicitly
+        const includeArchivedAndForked = 'fork:true archived:true';
+        
         // Search each month of the year
         for (let month = 1; month <= 12; month++) {
             const monthStr = month.toString().padStart(2, '0');
@@ -338,7 +344,7 @@ class GitHubScanner {
             // Calculate end date (last day of month)
             const endDate = new Date(year, month, 0).toISOString().split('T')[0];
             
-            const monthQuery = `${baseQuery} created:${startDate}..${endDate} ${additionalQualifiers}`.trim();
+            const monthQuery = `${baseQuery} ${includeArchivedAndForked} created:${startDate}..${endDate} ${additionalQualifiers}`.trim();
             const monthStrategy = {
                 query: monthQuery,
                 description: `Repositories created in ${year}-${monthStr}`,
