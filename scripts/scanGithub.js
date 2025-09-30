@@ -510,7 +510,7 @@ class GitHubScanner {
         if (adapterEntry.meta) {
             // Meta can be a full URL like: https://raw.githubusercontent.com/owner/repo/master/io-package.json
             // Extract owner/repo from the URL
-            const metaMatch = adapterEntry.meta.match(/github\.com\/([^\/]+\/[^\/]+)\//);
+            const metaMatch = adapterEntry.meta.match(/githubusercontent\.com\/([^\/]+\/[^\/]+)\//);
             if (metaMatch) {
                 const metaRepo = metaMatch[1];
                 return metaRepo.toLowerCase() === repoFullName.toLowerCase();
@@ -538,7 +538,7 @@ class GitHubScanner {
         if (adapterEntry.meta) {
             // Meta can be a full URL like: https://raw.githubusercontent.com/owner/repo/master/io-package.json
             // Extract owner/repo from the URL
-            const metaMatch = adapterEntry.meta.match(/github\.com\/([^\/]+\/[^\/]+)\//);
+            const metaMatch = adapterEntry.meta.match(/githubusercontent\.com\/([^\/]+\/[^\/]+)\//);
             if (metaMatch) {
                 const metaRepo = metaMatch[1];
                 return metaRepo.toLowerCase() === repoFullName.toLowerCase();
