@@ -16,7 +16,7 @@ const path = require('path');
 const REPOSITORY_BLACKLIST = [
     'admin',
     'js-controller',
-    'doc',
+    'docs',
     'repositories',
     'repochecker',
     'example'
