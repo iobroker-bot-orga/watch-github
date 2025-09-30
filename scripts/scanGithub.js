@@ -247,8 +247,12 @@ class GitHubScanner {
         const baseQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
         const additionalQualifiers = process.env.ADDITIONAL_QUALIFIERS || '';
         
-        // Include archived and forked repositories explicitly
-        const includeArchivedAndForked = 'fork:true archived:true';
+        // We need to search separately for archived and non-archived repositories
+        // because archived:true returns ONLY archived repos, and archived:false returns ONLY non-archived repos
+        const archivedStates = [
+            { qualifier: 'archived:false', description: 'non-archived' },
+            { qualifier: 'archived:true', description: 'archived' }
+        ];
         
         const strategies = [];
         const currentYear = new Date().getFullYear();
@@ -256,13 +260,17 @@ class GitHubScanner {
         
         // Generate year-based search strategies from current year down to 2014
         for (let year = currentYear; year >= startYear; year--) {
-            const yearQuery = `${baseQuery} ${includeArchivedAndForked} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
-            strategies.push({
-                query: yearQuery,
-                description: `Repositories created in ${year}`,
-                year: year,
-                needsMonthlyBreakdown: false // Will be set to true if we hit the 1000-result limit
-            });
+            // Search for both archived and non-archived repositories
+            for (const archivedState of archivedStates) {
+                const yearQuery = `${baseQuery} fork:true ${archivedState.qualifier} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
+                strategies.push({
+                    query: yearQuery,
+                    description: `${archivedState.description} repositories created in ${year}`,
+                    year: year,
+                    archivedState: archivedState.qualifier,
+                    needsMonthlyBreakdown: false // Will be set to true if we hit the 1000-result limit
+                });
+            }
         }
         
         return strategies;
@@ -333,8 +341,8 @@ class GitHubScanner {
         const year = yearStrategy.year;
         const allRepositories = [];
         
-        // Include archived and forked repositories explicitly
-        const includeArchivedAndForked = 'fork:true archived:true';
+        // Use the archived state from the parent strategy
+        const archivedQualifier = yearStrategy.archivedState || 'archived:false';
         
         // Search each month of the year
         for (let month = 1; month <= 12; month++) {
@@ -344,12 +352,13 @@ class GitHubScanner {
             // Calculate end date (last day of month)
             const endDate = new Date(year, month, 0).toISOString().split('T')[0];
             
-            const monthQuery = `${baseQuery} ${includeArchivedAndForked} created:${startDate}..${endDate} ${additionalQualifiers}`.trim();
+            const monthQuery = `${baseQuery} fork:true ${archivedQualifier} created:${startDate}..${endDate} ${additionalQualifiers}`.trim();
             const monthStrategy = {
                 query: monthQuery,
-                description: `Repositories created in ${year}-${monthStr}`,
+                description: `Repositories created in ${year}-${monthStr} (${archivedQualifier})`,
                 year: year,
                 month: month,
+                archivedState: archivedQualifier,
                 isMonthly: true
             };
             
