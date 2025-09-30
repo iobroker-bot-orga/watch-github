@@ -48,12 +48,22 @@ npm install
 # Run the scanner (basic usage)
 npm run scan
 
+# Run with cleanup mode (removes invalid repositories)
+node scripts/scanGithub.js --cleanup
+
 # Run with custom search query
 SEARCH_QUERY="iobroker in:name language:javascript" node scripts/scanGithub.js
 
 # Run with additional qualifiers
 SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="language:javascript" node scripts/scanGithub.js
+
+# Combine cleanup with custom search
+SEARCH_QUERY="iobroker in:name" node scripts/scanGithub.js --cleanup
 ```
+
+#### Command Line Options
+
+- `--cleanup`: Remove all repositories marked with `valid: false` from the database file
 
 #### Environment Variables
 
