@@ -435,9 +435,10 @@ class GitHubScanner {
      * @returns {boolean} - True if name matches ioBroker.* pattern (case-insensitive)
      */
     matchesIoBrokerPattern(repoName) {
-        const name = repoName.toLowerCase();
+        //const name = repoName.toLowerCase();
         // Must match "iobroker." followed by something (not just "iobroker")
-        return name.startsWith('iobroker.') && name.length > 9; // 9 = "iobroker.".length
+        //return name.startsWith('iobroker.') && name.length > 9; // 9 = "iobroker.".length
+        return repoName.match(/^iobroker\.[a-zA-Z0-0-_]$/i);
     }
 
     /**
@@ -592,6 +593,7 @@ class GitHubScanner {
         
         // Primary check: name must match "ioBroker.*" pattern (case insensitive)
         if (!this.matchesIoBrokerPattern(repo.name)) {
+            console.log(`⛔ Skipping ${repo.full_name} - repository name is invalid`);
             return false;
         }
         
