@@ -470,7 +470,7 @@ class GitHubScanner {
                 repo: repo.name,
                 path: 'io-package.json'
             });
-            sleep (30000); // wait 30s
+            //sleep (30000); // wait 30s
             return true;
         } catch (error) {
             if (error.status === 404) {
