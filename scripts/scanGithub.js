@@ -170,9 +170,9 @@ class GitHubScanner {
         
         const strategies = [];
         const currentYear = new Date().getFullYear();
-        const startYear = 1990;
+        const startYear = 2014;
         
-        // Generate year-based search strategies from current year down to 1990
+        // Generate year-based search strategies from current year down to 2014
         for (let year = currentYear; year >= startYear; year--) {
             const yearQuery = `${baseQuery} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
             strategies.push({
