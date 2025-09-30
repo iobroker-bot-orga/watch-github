@@ -11,6 +11,12 @@ const { Octokit } = require('@octokit/rest');
 const fs = require('fs');
 const path = require('path');
 
+function sleep(ms) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+}
+
 class GitHubScanner {
     constructor() {
         // Initialize Octokit with optional authentication
@@ -435,6 +441,7 @@ class GitHubScanner {
                 repo: repo.name,
                 path: 'io-package.json'
             });
+            sleep (30000); // wait 30s
             return true;
         } catch (error) {
             if (error.status === 404) {
