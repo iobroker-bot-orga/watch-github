@@ -65,7 +65,7 @@ SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="stars:>10" node scripts/s
 #### Features
 
 - Scans all public repositories on GitHub
-- Uses multiple search strategies to work around GitHub's 1000-result limit
+- Uses year-based search strategy with monthly fallback to work around GitHub's 1000-result limit
 - Identifies repositories with names starting with "iobroker"
 - Finds repositories with ioBroker-related descriptions and topics
 - Maintains persistent repository database
@@ -75,15 +75,13 @@ SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="stars:>10" node scripts/s
 
 #### GitHub API Limit Handling
 
-The GitHub Search API has a hard limit of 1000 results per search query. To work around this limitation, the scanner uses multiple complementary search strategies:
+The GitHub Search API has a hard limit of 1000 results per search query. To work around this limitation, the scanner uses a **year-based search strategy**:
 
-1. **Primary search**: Uses the base query (default: "iobroker in:name")
-2. **Popular repositories**: Searches for repositories with >10 stars
-3. **Active repositories**: Searches for repositories with >1 star
-4. **Language-specific**: Separate searches for JavaScript and TypeScript repositories
-5. **Description-based**: Searches for "iobroker adapter" in repository descriptions
+1. **Year-by-year search**: Searches for repositories created in each year from current year down to 1990
+2. **Monthly breakdown fallback**: If any year returns more than 1000 results, it automatically breaks down that year into monthly searches
+3. **Comprehensive coverage**: Ensures all repositories matching the name requirements are discovered regardless of when they were created
 
-Each strategy is limited to 10 pages (1000 results) and includes proper error handling for the 422 status code that GitHub returns when the limit is exceeded.
+This approach guarantees complete discovery of all matching repositories by systematically searching through creation date ranges, with automatic granular breakdown when needed.
 
 ## Repository Database
 

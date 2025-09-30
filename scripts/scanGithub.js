@@ -161,51 +161,34 @@ class GitHubScanner {
     }
 
     /**
-     * Get search strategies to work around GitHub's 1000-result limit
+     * Get search strategies based on year-by-year creation dates to work around GitHub's 1000-result limit
      */
     getSearchStrategies() {
         // Build base search query from environment variables or defaults
         const baseQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
         const additionalQualifiers = process.env.ADDITIONAL_QUALIFIERS || '';
         
-        const strategies = [
-            {
-                query: `${baseQuery} ${additionalQualifiers}`.trim(),
-                description: 'Primary search (most recent)'
-            },
-            {
-                query: `${baseQuery} stars:>10 ${additionalQualifiers}`.trim(),
-                description: 'Popular repositories (>10 stars)'
-            },
-            {
-                query: `${baseQuery} stars:>1 ${additionalQualifiers}`.trim(),
-                description: 'Active repositories (>1 star)'
-            },
-            {
-                query: `${baseQuery} language:javascript ${additionalQualifiers}`.trim(),
-                description: 'JavaScript repositories'
-            },
-            {
-                query: `${baseQuery} language:typescript ${additionalQualifiers}`.trim(),
-                description: 'TypeScript repositories'
-            },
-            {
-                query: `iobroker adapter in:description ${additionalQualifiers}`.trim(),
-                description: 'Repositories with "adapter" in description'
-            }
-        ];
+        const strategies = [];
+        const currentYear = new Date().getFullYear();
+        const startYear = 1990;
         
-        // Remove duplicates and empty queries
-        const uniqueStrategies = strategies.filter((strategy, index, arr) => 
-            strategy.query.trim() && 
-            arr.findIndex(s => s.query === strategy.query) === index
-        );
+        // Generate year-based search strategies from current year down to 1990
+        for (let year = currentYear; year >= startYear; year--) {
+            const yearQuery = `${baseQuery} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
+            strategies.push({
+                query: yearQuery,
+                description: `Repositories created in ${year}`,
+                year: year,
+                needsMonthlyBreakdown: false // Will be set to true if we hit the 1000-result limit
+            });
+        }
         
-        return uniqueStrategies;
+        return strategies;
     }
 
     /**
      * Search GitHub with a specific strategy, handling the 1000-result limit
+     * If a year-based search hits the limit, it will automatically break down by months
      */
     async searchWithStrategy(strategy) {
         const repositories = [];
@@ -238,6 +221,15 @@ class GitHubScanner {
             } catch (error) {
                 if (error.status === 422 && error.message.includes('Only the first 1000 search results are available')) {
                     console.log(`⚠️  Reached GitHub's 1000-result limit for strategy: ${strategy.description}`);
+                    
+                    // If this is a year-based strategy and we hit the limit, break down by months
+                    if (strategy.year && !strategy.isMonthly) {
+                        console.log(`🔍 Breaking down ${strategy.year} search by months...`);
+                        const monthlyResults = await this.searchYearByMonths(strategy);
+                        repositories.push(...monthlyResults);
+                        console.log(`   Found ${repositories.length} repositories total for ${strategy.year} (monthly breakdown)`);
+                        return repositories;
+                    }
                     break;
                 } else {
                     // Re-throw other errors
@@ -248,6 +240,45 @@ class GitHubScanner {
         
         console.log(`   Found ${repositories.length} repositories with this strategy`);
         return repositories;
+    }
+
+    /**
+     * Search a specific year by breaking it down into months
+     */
+    async searchYearByMonths(yearStrategy) {
+        const baseQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
+        const additionalQualifiers = process.env.ADDITIONAL_QUALIFIERS || '';
+        const year = yearStrategy.year;
+        const allRepositories = [];
+        
+        // Search each month of the year
+        for (let month = 1; month <= 12; month++) {
+            const monthStr = month.toString().padStart(2, '0');
+            const startDate = `${year}-${monthStr}-01`;
+            
+            // Calculate end date (last day of month)
+            const endDate = new Date(year, month, 0).toISOString().split('T')[0];
+            
+            const monthQuery = `${baseQuery} created:${startDate}..${endDate} ${additionalQualifiers}`.trim();
+            const monthStrategy = {
+                query: monthQuery,
+                description: `Repositories created in ${year}-${monthStr}`,
+                year: year,
+                month: month,
+                isMonthly: true
+            };
+            
+            console.log(`\n🔍 Searching month: ${monthStrategy.description}`);
+            console.log(`   Query: ${monthStrategy.query}`);
+            
+            const monthResults = await this.searchWithStrategy(monthStrategy);
+            allRepositories.push(...monthResults);
+            
+            // Add delay between months
+            await this.delay(500);
+        }
+        
+        return allRepositories;
     }
 
     /**
