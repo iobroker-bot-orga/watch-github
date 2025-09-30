@@ -19,7 +19,8 @@ const REPOSITORY_BLACKLIST = [
     'docs',
     'repositories',
     'repochecker',
-    'example'
+    'example',
+    'vis-2'
 ];
 
 const repositoryCache = {};
