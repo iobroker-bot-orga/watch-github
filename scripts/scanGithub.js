@@ -116,7 +116,23 @@ class GitHubScanner {
     /**
      * Save repositories to JSON file
      */
-    saveRepositoriesToJson() {
+    saveRepositoriesToJson(cleanup = false) {
+        // If cleanup is enabled, remove invalid repositories
+        if (cleanup) {
+            const beforeCount = Object.keys(this.existingRepositories.repositories).length;
+            const validRepositories = {};
+            
+            for (const [key, repo] of Object.entries(this.existingRepositories.repositories)) {
+                if (repo.valid === true) {
+                    validRepositories[key] = repo;
+                }
+            }
+            
+            this.existingRepositories.repositories = validRepositories;
+            const removedCount = beforeCount - Object.keys(validRepositories).length;
+            console.log(`🧹 Cleanup: Removed ${removedCount} invalid repositories from database`);
+        }
+        
         const data = {
             lastUpdated: new Date().toISOString(),
             totalRepositories: Object.keys(this.existingRepositories.repositories).length,
@@ -141,8 +157,12 @@ class GitHubScanner {
     /**
      * Scan GitHub for repositories matching ioBroker adapter pattern
      */
-    async scanForIoBrokerRepositories() {
+    async scanForIoBrokerRepositories(cleanup = false) {
         console.log('🔍 Starting GitHub scan for ioBroker adapter repositories...\n');
+        
+        if (cleanup) {
+            console.log('🧹 Cleanup mode enabled: Invalid repositories will be removed from database\n');
+        }
         
         try {
             // Load external sources data
@@ -175,6 +195,9 @@ class GitHubScanner {
                         // Extract adapter name for checking against sources
                         const adapterName = this.extractAdapterName(repo.full_name);
                         
+                        // Get the root repository for forked repos
+                        const base = await this.getRootRepository(repo);
+                        
                         const repoData = {
                             name: repo.name,
                             full_name: repo.full_name,
@@ -185,9 +208,9 @@ class GitHubScanner {
                             updated_at: repo.updated_at,
                             isForked: repo.fork || false,
                             isArchived: repo.archived || false,
-                            base: repo.fork && repo.parent ? repo.parent.full_name : null,
-                            inLatest: sourcesLatest && sourcesLatest[adapterName] ? true : false,
-                            inStable: sourcesStable && sourcesStable[adapterName] ? true : false,
+                            base: base,
+                            inLatest: this.checkInLatest(adapterName, repo.full_name, sourcesLatest),
+                            inStable: this.checkInStable(adapterName, repo.full_name, sourcesStable),
                             valid: true,
                             lastScanned: new Date().toISOString()
                         };
@@ -223,7 +246,7 @@ class GitHubScanner {
             console.log(`   📦 Total repositories in database: ${Object.keys(this.existingRepositories.repositories).length}\n`);
             
             // Save to JSON file
-            this.saveRepositoriesToJson();
+            this.saveRepositoriesToJson(cleanup);
             
             // Display results
             this.displayResults();
@@ -424,6 +447,108 @@ class GitHubScanner {
     }
 
     /**
+     * Get the root/source repository by traversing the fork chain
+     * @param {object} repo - Repository object
+     * @returns {Promise<string|null>} - Full name of the root repository or null
+     */
+    async getRootRepository(repo) {
+        if (!repo.fork) {
+            // Not a fork, this is the root
+            return repo.full_name;
+        }
+        
+        try {
+            // Get detailed repository info to access parent
+            const { data: repoData } = await this.octokit.rest.repos.get({
+                owner: repo.owner.login,
+                repo: repo.name
+            });
+            
+            if (!repoData.parent) {
+                // No parent info available, return current repo
+                return repo.full_name;
+            }
+            
+            // Recursively traverse up the fork chain
+            let currentRepo = repoData.parent;
+            while (currentRepo.fork && currentRepo.parent) {
+                const { data: parentData } = await this.octokit.rest.repos.get({
+                    owner: currentRepo.owner.login,
+                    repo: currentRepo.name
+                });
+                
+                if (!parentData.parent) {
+                    // This is the root
+                    return parentData.full_name;
+                }
+                
+                currentRepo = parentData.parent;
+            }
+            
+            return currentRepo.full_name;
+        } catch (error) {
+            console.warn(`⚠️  Error getting root repository for ${repo.full_name}: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Check if adapter is in sources-dist.json (latest) and meta references this repo
+     * @param {string} adapterName - Adapter name
+     * @param {string} repoFullName - Full name of the repository
+     * @param {object} sourcesLatest - Sources dist data
+     * @returns {boolean} - True if adapter is in latest and meta references this repo
+     */
+    checkInLatest(adapterName, repoFullName, sourcesLatest) {
+        if (!sourcesLatest || !sourcesLatest[adapterName]) {
+            return false;
+        }
+        
+        const adapterEntry = sourcesLatest[adapterName];
+        
+        // Check if meta attribute references this repository's io-package.json
+        if (adapterEntry.meta) {
+            // Meta can be a full URL like: https://raw.githubusercontent.com/owner/repo/master/io-package.json
+            // Extract owner/repo from the URL
+            const metaMatch = adapterEntry.meta.match(/github\.com\/([^\/]+\/[^\/]+)\//);
+            if (metaMatch) {
+                const metaRepo = metaMatch[1];
+                return metaRepo.toLowerCase() === repoFullName.toLowerCase();
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check if adapter is in sources-dist-stable.json and meta references this repo
+     * @param {string} adapterName - Adapter name
+     * @param {string} repoFullName - Full name of the repository
+     * @param {object} sourcesStable - Sources dist stable data
+     * @returns {boolean} - True if adapter is in stable and meta references this repo
+     */
+    checkInStable(adapterName, repoFullName, sourcesStable) {
+        if (!sourcesStable || !sourcesStable[adapterName]) {
+            return false;
+        }
+        
+        const adapterEntry = sourcesStable[adapterName];
+        
+        // Check if meta attribute references this repository's io-package.json
+        if (adapterEntry.meta) {
+            // Meta can be a full URL like: https://raw.githubusercontent.com/owner/repo/master/io-package.json
+            // Extract owner/repo from the URL
+            const metaMatch = adapterEntry.meta.match(/github\.com\/([^\/]+\/[^\/]+)\//);
+            if (metaMatch) {
+                const metaRepo = metaMatch[1];
+                return metaRepo.toLowerCase() === repoFullName.toLowerCase();
+            }
+        }
+        
+        return false;
+    }
+
+    /**
      * Check if a repository is likely an ioBroker adapter
      */
     async isLikelyIoBrokerAdapter(repo) {
@@ -432,6 +557,13 @@ class GitHubScanner {
         // Primary check: name must match "ioBroker.*" pattern (case insensitive)
         if (!this.matchesIoBrokerPattern(repo.name)) {
             return false;
+        }
+        
+        // Optimization: Skip io-package.json check if adapter is already listed with valid=true
+        const existingRepo = this.existingRepositories.repositories[repo.full_name];
+        if (existingRepo && existingRepo.valid === true) {
+            // Already validated, no need to check again
+            return true;
         }
         
         // Secondary check: must contain io-package.json file
@@ -517,8 +649,12 @@ class GitHubScanner {
 
 // Main execution
 async function main() {
+    // Parse command line arguments
+    const args = process.argv.slice(2);
+    const cleanup = args.includes('--cleanup');
+    
     const scanner = new GitHubScanner();
-    await scanner.scanForIoBrokerRepositories();
+    await scanner.scanForIoBrokerRepositories(cleanup);
 }
 
 // Run the scanner if this script is executed directly
