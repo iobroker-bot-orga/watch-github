@@ -25,7 +25,7 @@ The workflow (`./github/workflows/scan-repositories.yml`) provides:
 Navigate to Actions → "Scan GitHub for ioBroker Repositories" → "Run workflow" with options:
 
 - **Custom search query**: Override the default "iobroker in:name" search
-- **Additional qualifiers**: Add search qualifiers like "language:javascript stars:>5"  
+- **Additional qualifiers**: Add search qualifiers like "language:javascript created:>2020"  
 - **Dry run mode**: Test the scan without committing changes
 
 ### Workflow Features
@@ -52,7 +52,7 @@ npm run scan
 SEARCH_QUERY="iobroker in:name language:javascript" node scripts/scanGithub.js
 
 # Run with additional qualifiers
-SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="stars:>10" node scripts/scanGithub.js
+SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="language:javascript" node scripts/scanGithub.js
 ```
 
 #### Environment Variables
@@ -67,7 +67,7 @@ SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="stars:>10" node scripts/s
 - Scans all public repositories on GitHub
 - Uses year-based search strategy with monthly fallback to work around GitHub's 1000-result limit
 - Identifies repositories with names starting with "iobroker"
-- Finds repositories with ioBroker-related descriptions and topics
+- Finds repositories with ioBroker-related descriptions and metadata
 - Maintains persistent repository database
 - Never removes existing repositories (marks as invalid instead)
 - Provides detailed output with repository information
@@ -93,7 +93,7 @@ The `ioBrokerRepositories.json` file contains:
   "totalRepositories": 150,
   "scanSummary": {
     "newRepositoriesFound": 3,
-    "searchStrategies": "Primary search (most recent), Popular repositories (>10 stars), Active repositories (>1 star), JavaScript repositories, TypeScript repositories, Repositories with adapter in description",
+    "searchStrategies": "Primary search (most recent), Popular repositories (JavaScript), Active repositories, TypeScript repositories, Repositories with adapter in description",
     "baseSearchQuery": "iobroker in:name",
     "additionalQualifiers": ""
   },
@@ -104,10 +104,13 @@ The `ioBrokerRepositories.json` file contains:
       "html_url": "https://github.com/ioBroker/ioBroker.admin",
       "description": "Admin interface for ioBroker",
       "language": "JavaScript", 
-      "stars": 150,
       "forks": 45,
       "updated_at": "2024-01-15T10:30:00Z",
-      "topics": ["iobroker", "adapter", "admin"],
+      "isForked": false,
+      "isArchived": false,
+      "base": null,
+      "inLatest": true,
+      "inStable": true,
       "valid": true,
       "lastScanned": "2024-09-30T09:00:00.000Z"
     }
@@ -119,15 +122,22 @@ The `ioBrokerRepositories.json` file contains:
 
 - `valid`: `true` if found in latest scan, `false` if no longer exists
 - `lastScanned`: Timestamp of when repository was last found
-- Standard GitHub repository metadata (stars, forks, language, topics, etc.)
+- `isForked`: `true` if repository is a fork, `false` otherwise
+- `isArchived`: `true` if repository is archived, `false` otherwise  
+- `base`: For forked repositories, the full name of the source repository (e.g., "owner/repo")
+- `inLatest`: `true` if adapter is present in ioBroker's latest sources repository
+- `inStable`: `true` if adapter is present in ioBroker's stable sources repository
+- Standard GitHub repository metadata (forks, language, etc.)
 
 ## Output
 
 The scanner displays:
 - Repository name and URL
 - Description and programming language
-- Star and fork counts
+- Fork counts and repository status
 - Last update date
-- Topics/tags
+- Fork status and source repository (if applicable)
+- Archive status
+- Presence in ioBroker latest/stable repositories
 - Repository validity status
 - Summary statistics including new/updated/invalid repositories
