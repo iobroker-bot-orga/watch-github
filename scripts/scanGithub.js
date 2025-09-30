@@ -55,7 +55,8 @@ class GitHubScanner {
             totalRepositories: Object.keys(this.existingRepositories.repositories).length,
             scanSummary: {
                 newRepositoriesFound: this.foundRepositories.length,
-                searchQuery: process.env.SEARCH_QUERY || 'iobroker in:name',
+                searchStrategies: this.getSearchStrategies().map(s => s.description).join(', '),
+                baseSearchQuery: process.env.SEARCH_QUERY || 'iobroker in:name',
                 additionalQualifiers: process.env.ADDITIONAL_QUALIFIERS || ''
             },
             repositories: this.existingRepositories.repositories
@@ -77,39 +78,25 @@ class GitHubScanner {
         console.log('🔍 Starting GitHub scan for ioBroker adapter repositories...\n');
         
         try {
-            // Build search query from environment variables or defaults
-            let searchQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
-            if (process.env.ADDITIONAL_QUALIFIERS) {
-                searchQuery += ` ${process.env.ADDITIONAL_QUALIFIERS}`;
-            }
-            
-            console.log(`Searching for: ${searchQuery}`);
-            
             // Mark all existing repositories as potentially invalid (we'll mark them valid if found)
             const existingRepoKeys = Object.keys(this.existingRepositories.repositories);
             existingRepoKeys.forEach(key => {
                 this.existingRepositories.repositories[key].valid = false;
             });
             
-            let page = 1;
-            let hasNextPage = true;
             let newRepositoriesFound = 0;
             let updatedRepositories = 0;
             
-            while (hasNextPage) {
-                console.log(`📄 Fetching page ${page}...`);
+            // Use multiple search strategies to work around the 1000-result limit
+            const searchStrategies = this.getSearchStrategies();
+            
+            for (const strategy of searchStrategies) {
+                console.log(`\n🔍 Using search strategy: ${strategy.description}`);
+                console.log(`   Query: ${strategy.query}`);
                 
-                const response = await this.octokit.rest.search.repos({
-                    q: searchQuery,
-                    sort: 'updated',
-                    order: 'desc',
-                    per_page: 100,
-                    page: page
-                });
+                const strategyResults = await this.searchWithStrategy(strategy);
                 
-                const repositories = response.data.items;
-                
-                for (const repo of repositories) {
+                for (const repo of strategyResults) {
                     // Filter for repositories that match ioBroker adapter pattern
                     if (this.isLikelyIoBrokerAdapter(repo)) {
                         const repoData = {
@@ -131,22 +118,18 @@ class GitHubScanner {
                         if (!this.existingRepositories.repositories[repoKey]) {
                             newRepositoriesFound++;
                             console.log(`🆕 New repository found: ${repo.full_name}`);
+                            this.foundRepositories.push(repoData);
                         } else {
                             updatedRepositories++;
                         }
                         
                         // Add or update repository
                         this.existingRepositories.repositories[repoKey] = repoData;
-                        this.foundRepositories.push(repoData);
                     }
                 }
                 
-                // Check if we have more pages
-                hasNextPage = repositories.length === 100;
-                page++;
-                
-                // Add a small delay to respect rate limits
-                await this.delay(100);
+                // Add delay between strategies to respect rate limits
+                await this.delay(500);
             }
             
             // Count invalid repositories (ones that were not found in current scan)
@@ -175,6 +158,96 @@ class GitHubScanner {
             
             throw error;
         }
+    }
+
+    /**
+     * Get search strategies to work around GitHub's 1000-result limit
+     */
+    getSearchStrategies() {
+        // Build base search query from environment variables or defaults
+        const baseQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
+        const additionalQualifiers = process.env.ADDITIONAL_QUALIFIERS || '';
+        
+        const strategies = [
+            {
+                query: `${baseQuery} ${additionalQualifiers}`.trim(),
+                description: 'Primary search (most recent)'
+            },
+            {
+                query: `${baseQuery} stars:>10 ${additionalQualifiers}`.trim(),
+                description: 'Popular repositories (>10 stars)'
+            },
+            {
+                query: `${baseQuery} stars:>1 ${additionalQualifiers}`.trim(),
+                description: 'Active repositories (>1 star)'
+            },
+            {
+                query: `${baseQuery} language:javascript ${additionalQualifiers}`.trim(),
+                description: 'JavaScript repositories'
+            },
+            {
+                query: `${baseQuery} language:typescript ${additionalQualifiers}`.trim(),
+                description: 'TypeScript repositories'
+            },
+            {
+                query: `iobroker adapter in:description ${additionalQualifiers}`.trim(),
+                description: 'Repositories with "adapter" in description'
+            }
+        ];
+        
+        // Remove duplicates and empty queries
+        const uniqueStrategies = strategies.filter((strategy, index, arr) => 
+            strategy.query.trim() && 
+            arr.findIndex(s => s.query === strategy.query) === index
+        );
+        
+        return uniqueStrategies;
+    }
+
+    /**
+     * Search GitHub with a specific strategy, handling the 1000-result limit
+     */
+    async searchWithStrategy(strategy) {
+        const repositories = [];
+        let page = 1;
+        let hasNextPage = true;
+        const maxPages = 10; // GitHub limit: 1000 results / 100 per_page = 10 pages max
+        
+        while (hasNextPage && page <= maxPages) {
+            try {
+                console.log(`📄 Fetching page ${page}...`);
+                
+                const response = await this.octokit.rest.search.repos({
+                    q: strategy.query,
+                    sort: 'updated',
+                    order: 'desc',
+                    per_page: 100,
+                    page: page
+                });
+                
+                const pageRepositories = response.data.items;
+                repositories.push(...pageRepositories);
+                
+                // Check if we have more pages (less than 100 results means last page)
+                hasNextPage = pageRepositories.length === 100;
+                page++;
+                
+                // Add a small delay to respect rate limits
+                await this.delay(100);
+                
+            } catch (error) {
+                if (error.status === 422 && error.message.includes('Only the first 1000 search results are available')) {
+                    console.log(`⚠️  Reached GitHub's 1000-result limit for strategy: ${strategy.description}`);
+                    break;
+                } else {
+                    // Re-throw other errors
+                    throw error;
+                }
+            }
+        }
+        
+        console.log(`   Found ${repositories.length} repositories with this strategy`);
+        return repositories;
     }
 
     /**
