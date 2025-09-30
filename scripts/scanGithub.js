@@ -22,6 +22,8 @@ const REPOSITORY_BLACKLIST = [
     'example'
 ];
 
+const repositoryCache = {};
+
 function sleep(ms) {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
@@ -629,10 +631,18 @@ class GitHubScanner {
             }
             
             // Check if base repository is in our existing repositories and has valid io-package.json
-            const baseRepo = this.existingRepositories.repositories[baseRepoFullName];
-            if (baseRepo && baseRepo.valid === true) {
-                console.log(`✅ Using cached result from base repository ${baseRepoFullName}`);
+            // const baseRepo = this.existingRepositories.repositories[baseRepoFullName];
+            // if (baseRepo && baseRepo.valid === true) {
+            //     console.log(`✅ Using cached result from base repository ${baseRepoFullName}`);
+            //     return true;
+            // }
+            if (repositoryCache[baseRepoFullName]?.hasIoPackage === true) {
+                console.log(`✅ Using cached result "true" from base repository ${baseRepoFullName}`);
                 return true;
+            }
+            if (repositoryCache[baseRepoFullName]?.hasIoPackage === false) {
+                console.log(`✅ Using cached result "false" from base repository ${baseRepoFullName}`);
+                return false;
             }
             
             // Base repo not cached or not valid, check it directly
@@ -653,17 +663,21 @@ class GitHubScanner {
             };
             
             const hasIoPackage = await this.hasIoPackageJson(baseRepoObj);
+            repositoryCache[baseRepoFullName] = {};
+            repositoryCache[baseRepoFullName].hasIoPackage = hasIoPackage;
             if (!hasIoPackage) {
                 console.log(`⚠️  Skipping ${repo.full_name} - base repository ${baseRepoFullName} missing io-package.json`);
                 return false;
+            } else {        
+                console.log(`✅ Base repository ${baseRepoFullName} has io-package.json, accepting fork`);
+                return true;
             }
-            
-            console.log(`✅ Base repository ${baseRepoFullName} has io-package.json, accepting fork`);
-            return true;
         }
         
         // Secondary check: must contain io-package.json file
         const hasIoPackage = await this.hasIoPackageJson(repo);
+        repositoryCache[repo.fullName] = {};
+        repositoryCache[repo.fullName].hasIoPackage = hasIoPackage;
         if (!hasIoPackage) {
             console.log(`⚠️  Skipping ${repo.full_name} - missing io-package.json`);
             return false;
