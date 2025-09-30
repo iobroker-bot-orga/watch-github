@@ -51,7 +51,7 @@ jobs:
           
       - name: Run repository scanner
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.IOBBOT_GITHUB_TOKEN }}
           SEARCH_QUERY: ${{ github.event.inputs.search_query || 'iobroker in:name' }}
           ADDITIONAL_QUALIFIERS: ${{ github.event.inputs.additional_qualifiers || '' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
