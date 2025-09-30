@@ -1,0 +1,59 @@
+{
+  "lastUpdated": "2025-09-30T09:07:38.227Z",
+  "totalRepositories": 3,
+  "scanSummary": {
+    "newRepositoriesFound": 1,
+    "searchQuery": "iobroker in:name",
+    "additionalQualifiers": ""
+  },
+  "repositories": {
+    "ioBroker/ioBroker.admin": {
+      "name": "ioBroker.admin",
+      "full_name": "ioBroker/ioBroker.admin",
+      "html_url": "https://github.com/ioBroker/ioBroker.admin",
+      "description": "Admin interface for ioBroker",
+      "language": "JavaScript",
+      "stars": 150,
+      "forks": 45,
+      "updated_at": "2024-01-15T10:30:00Z",
+      "topics": [
+        "iobroker",
+        "adapter",
+        "admin"
+      ],
+      "valid": false,
+      "lastScanned": "2023-01-01T00:00:00.000Z"
+    },
+    "test/old-repo": {
+      "name": "old-repo",
+      "full_name": "test/old-repo",
+      "html_url": "https://github.com/test/old-repo",
+      "description": "Old test repository",
+      "language": "JavaScript",
+      "stars": 5,
+      "forks": 1,
+      "updated_at": "2022-01-01T10:30:00Z",
+      "topics": [
+        "iobroker"
+      ],
+      "valid": false,
+      "lastScanned": "2023-01-01T00:00:00.000Z"
+    },
+    "testuser/iobroker.test": {
+      "name": "iobroker.test",
+      "full_name": "testuser/iobroker.test",
+      "html_url": "https://github.com/testuser/iobroker.test",
+      "description": "Test ioBroker adapter",
+      "language": "JavaScript",
+      "stars": 10,
+      "forks": 2,
+      "updated_at": "2024-09-30T10:00:00Z",
+      "topics": [
+        "iobroker",
+        "adapter"
+      ],
+      "valid": true,
+      "lastScanned": "2025-09-30T09:07:38.125Z"
+    }
+  }
+}

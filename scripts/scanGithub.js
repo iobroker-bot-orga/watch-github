@@ -8,6 +8,8 @@
  */
 
 const { Octokit } = require('@octokit/rest');
+const fs = require('fs');
+const path = require('path');
 
 class GitHubScanner {
     constructor() {
@@ -18,6 +20,54 @@ class GitHubScanner {
         });
         
         this.foundRepositories = [];
+        this.jsonFilePath = path.join(__dirname, '..', 'ioBrokerRepositories.json');
+        this.existingRepositories = this.loadExistingRepositories();
+    }
+
+    /**
+     * Load existing repositories from JSON file
+     */
+    loadExistingRepositories() {
+        try {
+            if (fs.existsSync(this.jsonFilePath)) {
+                const data = fs.readFileSync(this.jsonFilePath, 'utf8');
+                const parsed = JSON.parse(data);
+                console.log(`📄 Loaded ${Object.keys(parsed.repositories || {}).length} existing repositories from JSON file`);
+                return parsed;
+            }
+        } catch (error) {
+            console.warn(`⚠️  Error loading existing repositories: ${error.message}`);
+        }
+        
+        return {
+            lastUpdated: null,
+            totalRepositories: 0,
+            repositories: {}
+        };
+    }
+
+    /**
+     * Save repositories to JSON file
+     */
+    saveRepositoriesToJson() {
+        const data = {
+            lastUpdated: new Date().toISOString(),
+            totalRepositories: Object.keys(this.existingRepositories.repositories).length,
+            scanSummary: {
+                newRepositoriesFound: this.foundRepositories.length,
+                searchQuery: process.env.SEARCH_QUERY || 'iobroker in:name',
+                additionalQualifiers: process.env.ADDITIONAL_QUALIFIERS || ''
+            },
+            repositories: this.existingRepositories.repositories
+        };
+
+        try {
+            fs.writeFileSync(this.jsonFilePath, JSON.stringify(data, null, 2));
+            console.log(`✅ Saved repository data to ${this.jsonFilePath}`);
+        } catch (error) {
+            console.error(`❌ Error saving to JSON file: ${error.message}`);
+            throw error;
+        }
     }
 
     /**
@@ -27,13 +77,24 @@ class GitHubScanner {
         console.log('🔍 Starting GitHub scan for ioBroker adapter repositories...\n');
         
         try {
-            // Search for repositories with "iobroker" in the name
-            const searchQuery = 'iobroker in:name';
+            // Build search query from environment variables or defaults
+            let searchQuery = process.env.SEARCH_QUERY || 'iobroker in:name';
+            if (process.env.ADDITIONAL_QUALIFIERS) {
+                searchQuery += ` ${process.env.ADDITIONAL_QUALIFIERS}`;
+            }
             
             console.log(`Searching for: ${searchQuery}`);
             
+            // Mark all existing repositories as potentially invalid (we'll mark them valid if found)
+            const existingRepoKeys = Object.keys(this.existingRepositories.repositories);
+            existingRepoKeys.forEach(key => {
+                this.existingRepositories.repositories[key].valid = false;
+            });
+            
             let page = 1;
             let hasNextPage = true;
+            let newRepositoriesFound = 0;
+            let updatedRepositories = 0;
             
             while (hasNextPage) {
                 console.log(`📄 Fetching page ${page}...`);
@@ -51,7 +112,7 @@ class GitHubScanner {
                 for (const repo of repositories) {
                     // Filter for repositories that match ioBroker adapter pattern
                     if (this.isLikelyIoBrokerAdapter(repo)) {
-                        this.foundRepositories.push({
+                        const repoData = {
                             name: repo.name,
                             full_name: repo.full_name,
                             html_url: repo.html_url,
@@ -60,8 +121,23 @@ class GitHubScanner {
                             stars: repo.stargazers_count,
                             forks: repo.forks_count,
                             updated_at: repo.updated_at,
-                            topics: repo.topics || []
-                        });
+                            topics: repo.topics || [],
+                            valid: true,
+                            lastScanned: new Date().toISOString()
+                        };
+                        
+                        // Check if this is a new repository or an update
+                        const repoKey = repo.full_name;
+                        if (!this.existingRepositories.repositories[repoKey]) {
+                            newRepositoriesFound++;
+                            console.log(`🆕 New repository found: ${repo.full_name}`);
+                        } else {
+                            updatedRepositories++;
+                        }
+                        
+                        // Add or update repository
+                        this.existingRepositories.repositories[repoKey] = repoData;
+                        this.foundRepositories.push(repoData);
                     }
                 }
                 
@@ -73,7 +149,19 @@ class GitHubScanner {
                 await this.delay(100);
             }
             
-            console.log(`\n✅ Scan completed! Found ${this.foundRepositories.length} potential ioBroker adapter repositories.\n`);
+            // Count invalid repositories (ones that were not found in current scan)
+            const invalidCount = existingRepoKeys.filter(key => 
+                !this.existingRepositories.repositories[key].valid
+            ).length;
+            
+            console.log(`\n✅ Scan completed!`);
+            console.log(`   📊 New repositories found: ${newRepositoriesFound}`);
+            console.log(`   🔄 Updated repositories: ${updatedRepositories}`);
+            console.log(`   ❌ Repositories marked as invalid: ${invalidCount}`);
+            console.log(`   📦 Total repositories in database: ${Object.keys(this.existingRepositories.repositories).length}\n`);
+            
+            // Save to JSON file
+            this.saveRepositoriesToJson();
             
             // Display results
             this.displayResults();
@@ -84,6 +172,8 @@ class GitHubScanner {
             if (error.status === 403) {
                 console.error('Rate limit exceeded. Consider setting GITHUB_TOKEN environment variable for higher limits.');
             }
+            
+            throw error;
         }
     }
 
@@ -121,38 +211,62 @@ class GitHubScanner {
      * Display scan results
      */
     displayResults() {
-        if (this.foundRepositories.length === 0) {
+        const allRepositories = Object.values(this.existingRepositories.repositories);
+        const validRepositories = allRepositories.filter(repo => repo.valid);
+        const invalidRepositories = allRepositories.filter(repo => !repo.valid);
+        
+        if (allRepositories.length === 0) {
             console.log('No ioBroker adapter repositories found.');
             return;
         }
 
-        console.log('📋 Found repositories:');
+        console.log('📋 Repository Database Summary:');
         console.log('='.repeat(80));
+        console.log(`📦 Total repositories: ${allRepositories.length}`);
+        console.log(`✅ Valid repositories: ${validRepositories.length}`);
+        console.log(`❌ Invalid repositories: ${invalidRepositories.length}`);
+        console.log(`🆕 New repositories in this scan: ${this.foundRepositories.length}`);
         
-        this.foundRepositories.forEach((repo) => {
-            console.log(`📦 ${repo.full_name}`);
-            console.log(`   URL: ${repo.html_url}`);
-            console.log(`   Description: ${repo.description || 'No description'}`);
-            console.log(`   Language: ${repo.language || 'Unknown'}`);
-            console.log(`   ⭐ ${repo.stars} stars | 🍴 ${repo.forks} forks`);
-            console.log(`   Updated: ${new Date(repo.updated_at).toLocaleDateString()}`);
-            if (repo.topics.length > 0) {
-                console.log(`   Topics: ${repo.topics.join(', ')}`);
-            }
+        if (this.foundRepositories.length > 0) {
+            console.log('\n🆕 New repositories found in this scan:');
             console.log('-'.repeat(80));
-        });
+            
+            this.foundRepositories.forEach((repo) => {
+                console.log(`📦 ${repo.full_name}`);
+                console.log(`   URL: ${repo.html_url}`);
+                console.log(`   Description: ${repo.description || 'No description'}`);
+                console.log(`   Language: ${repo.language || 'Unknown'}`);
+                console.log(`   ⭐ ${repo.stars} stars | 🍴 ${repo.forks} forks`);
+                console.log(`   Updated: ${new Date(repo.updated_at).toLocaleDateString()}`);
+                if (repo.topics.length > 0) {
+                    console.log(`   Topics: ${repo.topics.join(', ')}`);
+                }
+                console.log('-'.repeat(40));
+            });
+        }
         
-        // Summary
-        console.log(`\n📊 Summary:`);
-        console.log(`   Total repositories found: ${this.foundRepositories.length}`);
+        if (invalidRepositories.length > 0) {
+            console.log('\n❌ Repositories marked as invalid (no longer found):');
+            console.log('-'.repeat(80));
+            
+            invalidRepositories.forEach((repo) => {
+                console.log(`📦 ${repo.full_name} (last seen: ${new Date(repo.lastScanned || repo.updated_at).toLocaleDateString()})`);
+            });
+        }
+        
+        // Summary statistics
+        console.log(`\n📊 Database Statistics:`);
+        console.log(`   Total repositories: ${allRepositories.length}`);
         
         const languages = {};
-        this.foundRepositories.forEach(repo => {
+        validRepositories.forEach(repo => {
             const lang = repo.language || 'Unknown';
             languages[lang] = (languages[lang] || 0) + 1;
         });
         
-        console.log(`   Languages: ${Object.entries(languages).map(([lang, count]) => `${lang} (${count})`).join(', ')}`);
+        console.log(`   Languages (valid repos): ${Object.entries(languages).map(([lang, count]) => `${lang} (${count})`).join(', ')}`);
+        
+        console.log(`\n💾 Repository data saved to: ioBrokerRepositories.json`);
     }
 
     /**
