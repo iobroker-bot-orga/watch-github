@@ -22,11 +22,78 @@ class GitHubScanner {
         this.foundRepositories = [];
         this.jsonFilePath = path.join(__dirname, '..', 'ioBrokerRepositories.json');
         this.existingRepositories = this.loadExistingRepositories();
+        
+        // Cache for external repository data
+        this.sourcesLatest = null;
+        this.sourcesStable = null;
     }
 
     /**
-     * Load existing repositories from JSON file
+     * Extract adapter name from repository full_name
+     * @param {string} fullName - Repository full name (e.g., "ioBroker/ioBroker.admin")
+     * @returns {string} - Adapter name (e.g., "admin")
      */
+    extractAdapterName(fullName) {
+        const repoName = fullName.split('/')[1] || '';
+        
+        // Remove "iobroker." prefix if present (case insensitive)
+        if (repoName.toLowerCase().startsWith('iobroker.')) {
+            return repoName.substring(9); // "iobroker.".length = 9
+        }
+        
+        // For repositories not following the pattern, use the full repo name
+        return repoName;
+    }
+
+    /**
+     * Load sources_dist.json from iobroker/ioBroker.repositories
+     */
+    async loadSourcesLatest() {
+        if (this.sourcesLatest) return this.sourcesLatest;
+        
+        try {
+            console.log('📡 Loading sources-dist.json from iobroker/ioBroker.repositories...');
+            const response = await this.octokit.rest.repos.getContent({
+                owner: 'iobroker',
+                repo: 'ioBroker.repositories',
+                path: 'sources-dist.json'
+            });
+            
+            const content = JSON.parse(Buffer.from(response.data.content, 'base64').toString());
+            this.sourcesLatest = content;
+            console.log(`✅ Loaded ${Object.keys(content).length - 1} adapters from sources-dist.json`); // -1 for _repoInfo
+            return content;
+        } catch (error) {
+            console.warn(`⚠️  Error loading sources-dist.json: ${error.message}`);
+            this.sourcesLatest = {};
+            return {};
+        }
+    }
+
+    /**
+     * Load sources-dist-stable.json from iobroker/ioBroker.repositories
+     */
+    async loadSourcesStable() {
+        if (this.sourcesStable) return this.sourcesStable;
+        
+        try {
+            console.log('📡 Loading sources-dist-stable.json from iobroker/ioBroker.repositories...');
+            const response = await this.octokit.rest.repos.getContent({
+                owner: 'iobroker',
+                repo: 'ioBroker.repositories',
+                path: 'sources-dist-stable.json'
+            });
+            
+            const content = JSON.parse(Buffer.from(response.data.content, 'base64').toString());
+            this.sourcesStable = content;
+            console.log(`✅ Loaded ${Object.keys(content).length - 1} adapters from sources-dist-stable.json`); // -1 for _repoInfo
+            return content;
+        } catch (error) {
+            console.warn(`⚠️  Error loading sources-dist-stable.json: ${error.message}`);
+            this.sourcesStable = {};
+            return {};
+        }
+    }
     loadExistingRepositories() {
         try {
             if (fs.existsSync(this.jsonFilePath)) {
@@ -78,6 +145,12 @@ class GitHubScanner {
         console.log('🔍 Starting GitHub scan for ioBroker adapter repositories...\n');
         
         try {
+            // Load external sources data
+            const [sourcesLatest, sourcesStable] = await Promise.all([
+                this.loadSourcesLatest(),
+                this.loadSourcesStable()
+            ]);
+            
             // Mark all existing repositories as potentially invalid (we'll mark them valid if found)
             const existingRepoKeys = Object.keys(this.existingRepositories.repositories);
             existingRepoKeys.forEach(key => {
@@ -99,16 +172,22 @@ class GitHubScanner {
                 for (const repo of strategyResults) {
                     // Filter for repositories that match ioBroker adapter pattern
                     if (this.isLikelyIoBrokerAdapter(repo)) {
+                        // Extract adapter name for checking against sources
+                        const adapterName = this.extractAdapterName(repo.full_name);
+                        
                         const repoData = {
                             name: repo.name,
                             full_name: repo.full_name,
                             html_url: repo.html_url,
                             description: repo.description,
                             language: repo.language,
-                            stars: repo.stargazers_count,
                             forks: repo.forks_count,
                             updated_at: repo.updated_at,
-                            topics: repo.topics || [],
+                            isForked: repo.fork || false,
+                            isArchived: repo.archived || false,
+                            base: repo.fork && repo.parent ? repo.parent.full_name : null,
+                            inLatest: sourcesLatest && sourcesLatest[adapterName] ? true : false,
+                            inStable: sourcesStable && sourcesStable[adapterName] ? true : false,
                             valid: true,
                             lastScanned: new Date().toISOString()
                         };
@@ -340,11 +419,12 @@ class GitHubScanner {
                 console.log(`   URL: ${repo.html_url}`);
                 console.log(`   Description: ${repo.description || 'No description'}`);
                 console.log(`   Language: ${repo.language || 'Unknown'}`);
-                console.log(`   ⭐ ${repo.stars} stars | 🍴 ${repo.forks} forks`);
+                console.log(`   🍴 ${repo.forks} forks`);
                 console.log(`   Updated: ${new Date(repo.updated_at).toLocaleDateString()}`);
-                if (repo.topics.length > 0) {
-                    console.log(`   Topics: ${repo.topics.join(', ')}`);
-                }
+                console.log(`   Forked: ${repo.isForked ? 'Yes' : 'No'}${repo.base ? ` (from ${repo.base})` : ''}`);
+                console.log(`   Archived: ${repo.isArchived ? 'Yes' : 'No'}`);
+                console.log(`   In Latest: ${repo.inLatest ? 'Yes' : 'No'}`);
+                console.log(`   In Stable: ${repo.inStable ? 'Yes' : 'No'}`);
                 console.log('-'.repeat(40));
             });
         }
