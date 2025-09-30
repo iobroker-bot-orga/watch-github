@@ -298,8 +298,9 @@ class GitHubScanner {
         const currentYear = new Date().getFullYear();
         const startYear = 2014;
         
-        // Generate year-based search strategies from current year down to 2014
-        for (let year = currentYear; year >= startYear; year--) {
+        // Generate year-based search strategies from 2014 up to current year
+        // for (let year = currentYear; year >= startYear; year--) {
+        for (let year = startYear; year <= currentYear; year++) {
             // Search for each configuration
             for (const config of searchConfigurations) {
                 const yearQuery = `${baseQuery} ${config.forkQualifier} ${config.archivedQualifier} created:${year}-01-01..${year}-12-31 ${additionalQualifiers}`.trim();
