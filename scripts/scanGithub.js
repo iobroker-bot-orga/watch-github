@@ -117,7 +117,7 @@ class GitHubScanner {
                         const repoKey = repo.full_name;
                         if (!this.existingRepositories.repositories[repoKey]) {
                             newRepositoriesFound++;
-                            console.log(`🆕 New repository found: ${repo.full_name}`);
+                            // console.log(`🆕 New repository found: ${repo.full_name}`);
                             this.foundRepositories.push(repoData);
                         } else {
                             updatedRepositories++;
