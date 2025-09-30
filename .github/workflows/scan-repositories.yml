@@ -1,4 +1,4 @@
-name: Scan GitHub for ioBroker Repositories
+name: scan-repositories
 
 on:
   schedule:
@@ -12,7 +12,7 @@ on:
         default: 'iobroker in:name'
         type: string
       additional_qualifiers:
-        description: 'Additional search qualifiers (e.g., "language:javascript stars:>5")'
+        description: 'Additional qualifiers (e.g., "language:javascript stars:>5")'
         required: false
         default: ''
         type: string
