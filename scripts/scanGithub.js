@@ -11,6 +11,17 @@ const { Octokit } = require('@octokit/rest');
 const fs = require('fs');
 const path = require('path');
 
+// Blacklist of repository names to ignore completely
+// These repositories will be skipped regardless of owner
+const REPOSITORY_BLACKLIST = [
+    'admin',
+    'js-controller',
+    'doc',
+    'repositories',
+    'repochecker',
+    'example'
+];
+
 function sleep(ms) {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
@@ -430,6 +441,24 @@ class GitHubScanner {
     }
 
     /**
+     * Check if a repository is in the blacklist
+     * @param {string} repoName - Repository name (e.g., "ioBroker.admin")
+     * @returns {boolean} - True if repository is blacklisted
+     */
+    isBlacklisted(repoName) {
+        // Extract adapter name from repository name
+        const name = repoName.toLowerCase();
+        
+        // Remove "iobroker." prefix if present
+        const adapterName = name.startsWith('iobroker.') 
+            ? name.substring(9)  // "iobroker.".length = 9
+            : name;
+        
+        // Check if adapter name is in the blacklist
+        return REPOSITORY_BLACKLIST.includes(adapterName);
+    }
+
+    /**
      * Check if a repository contains io-package.json file
      * @param {object} repo - Repository object
      * @returns {Promise<boolean>} - True if io-package.json exists
@@ -566,10 +595,23 @@ class GitHubScanner {
             return false;
         }
         
+        // Blacklist check: skip blacklisted repositories
+        if (this.isBlacklisted(repo.name)) {
+            console.log(`⛔ Skipping ${repo.full_name} - repository is blacklisted`);
+            return false;
+        }
+        
         // Optimization: Skip io-package.json check if adapter is already listed with valid=true
         const existingRepo = this.existingRepositories.repositories[repo.full_name];
         if (existingRepo && existingRepo.valid === true) {
             // Already validated, no need to check again
+            return true;
+        }
+        
+        // For forked repositories, skip io-package.json check
+        // The result will be retrieved from the source repository
+        if (repo.fork) {
+            console.log(`🍴 Skipping io-package.json check for forked repository: ${repo.full_name}`);
             return true;
         }
         
