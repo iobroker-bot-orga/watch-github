@@ -608,10 +608,55 @@ class GitHubScanner {
             return true;
         }
         
-        // For forked repositories, skip io-package.json check
-        // The result will be retrieved from the source repository
+        // For forked repositories, check io-package.json in the base repository
         if (repo.fork) {
-            console.log(`🍴 Skipping io-package.json check for forked repository: ${repo.full_name}`);
+            console.log(`🍴 Forked repository detected: ${repo.full_name}`);
+            
+            // Get the root/base repository
+            const baseRepoFullName = await this.getRootRepository(repo);
+            
+            if (!baseRepoFullName || baseRepoFullName === repo.full_name) {
+                // Could not determine base repo, fall back to checking this repo
+                console.log(`⚠️  Could not determine base repository for ${repo.full_name}, checking directly`);
+                const hasIoPackage = await this.hasIoPackageJson(repo);
+                if (!hasIoPackage) {
+                    console.log(`⚠️  Skipping ${repo.full_name} - missing io-package.json`);
+                    return false;
+                }
+                return true;
+            }
+            
+            // Check if base repository is in our existing repositories and has valid io-package.json
+            const baseRepo = this.existingRepositories.repositories[baseRepoFullName];
+            if (baseRepo && baseRepo.valid === true) {
+                console.log(`✅ Using cached result from base repository ${baseRepoFullName}`);
+                return true;
+            }
+            
+            // Base repo not cached or not valid, check it directly
+            console.log(`🔍 Checking io-package.json in base repository: ${baseRepoFullName}`);
+            
+            // Parse owner and repo name from base repository
+            const [baseOwner, baseRepoName] = baseRepoFullName.split('/');
+            if (!baseOwner || !baseRepoName) {
+                console.log(`⚠️  Invalid base repository format: ${baseRepoFullName}`);
+                return false;
+            }
+            
+            // Create a minimal repo object for base repository
+            const baseRepoObj = {
+                owner: { login: baseOwner },
+                name: baseRepoName,
+                full_name: baseRepoFullName
+            };
+            
+            const hasIoPackage = await this.hasIoPackageJson(baseRepoObj);
+            if (!hasIoPackage) {
+                console.log(`⚠️  Skipping ${repo.full_name} - base repository ${baseRepoFullName} missing io-package.json`);
+                return false;
+            }
+            
+            console.log(`✅ Base repository ${baseRepoFullName} has io-package.json, accepting fork`);
             return true;
         }
         
