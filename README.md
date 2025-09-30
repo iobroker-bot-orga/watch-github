@@ -65,12 +65,25 @@ SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="stars:>10" node scripts/s
 #### Features
 
 - Scans all public repositories on GitHub
+- Uses multiple search strategies to work around GitHub's 1000-result limit
 - Identifies repositories with names starting with "iobroker"
 - Finds repositories with ioBroker-related descriptions and topics
 - Maintains persistent repository database
 - Never removes existing repositories (marks as invalid instead)
 - Provides detailed output with repository information
 - Handles API rate limiting gracefully
+
+#### GitHub API Limit Handling
+
+The GitHub Search API has a hard limit of 1000 results per search query. To work around this limitation, the scanner uses multiple complementary search strategies:
+
+1. **Primary search**: Uses the base query (default: "iobroker in:name")
+2. **Popular repositories**: Searches for repositories with >10 stars
+3. **Active repositories**: Searches for repositories with >1 star
+4. **Language-specific**: Separate searches for JavaScript and TypeScript repositories
+5. **Description-based**: Searches for "iobroker adapter" in repository descriptions
+
+Each strategy is limited to 10 pages (1000 results) and includes proper error handling for the 422 status code that GitHub returns when the limit is exceeded.
 
 ## Repository Database
 
@@ -82,7 +95,8 @@ The `ioBrokerRepositories.json` file contains:
   "totalRepositories": 150,
   "scanSummary": {
     "newRepositoriesFound": 3,
-    "searchQuery": "iobroker in:name",
+    "searchStrategies": "Primary search (most recent), Popular repositories (>10 stars), Active repositories (>1 star), JavaScript repositories, TypeScript repositories, Repositories with adapter in description",
+    "baseSearchQuery": "iobroker in:name",
     "additionalQualifiers": ""
   },
   "repositories": {
