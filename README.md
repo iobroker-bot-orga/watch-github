@@ -66,8 +66,8 @@ SEARCH_QUERY="iobroker in:name" ADDITIONAL_QUALIFIERS="language:javascript" node
 
 - Scans all public repositories on GitHub
 - Uses year-based search strategy with monthly fallback to work around GitHub's 1000-result limit
-- Identifies repositories with names starting with "iobroker"
-- Finds repositories with ioBroker-related descriptions and metadata
+- Identifies repositories with names matching "ioBroker.*" pattern (case-insensitive)
+- Validates repositories by checking for `io-package.json` file
 - Maintains persistent repository database
 - Never removes existing repositories (marks as invalid instead)
 - Provides detailed output with repository information

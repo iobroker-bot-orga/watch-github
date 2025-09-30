@@ -171,7 +171,7 @@ class GitHubScanner {
                 
                 for (const repo of strategyResults) {
                     // Filter for repositories that match ioBroker adapter pattern
-                    if (this.isLikelyIoBrokerAdapter(repo)) {
+                    if (await this.isLikelyIoBrokerAdapter(repo)) {
                         // Extract adapter name for checking against sources
                         const adapterName = this.extractAdapterName(repo.full_name);
                         
@@ -390,33 +390,58 @@ class GitHubScanner {
     }
 
     /**
+     * Check if a repository name matches the ioBroker.* pattern
+     * @param {string} repoName - Repository name
+     * @returns {boolean} - True if name matches ioBroker.* pattern (case-insensitive)
+     */
+    matchesIoBrokerPattern(repoName) {
+        const name = repoName.toLowerCase();
+        // Must match "iobroker." followed by something (not just "iobroker")
+        return name.startsWith('iobroker.') && name.length > 9; // 9 = "iobroker.".length
+    }
+
+    /**
+     * Check if a repository contains io-package.json file
+     * @param {object} repo - Repository object
+     * @returns {Promise<boolean>} - True if io-package.json exists
+     */
+    async hasIoPackageJson(repo) {
+        try {
+            await this.octokit.rest.repos.getContent({
+                owner: repo.owner.login,
+                repo: repo.name,
+                path: 'io-package.json'
+            });
+            return true;
+        } catch (error) {
+            if (error.status === 404) {
+                return false;
+            }
+            // For other errors (rate limit, etc), log warning but assume file might exist
+            console.warn(`⚠️  Error checking io-package.json for ${repo.full_name}: ${error.message}`);
+            return false;
+        }
+    }
+
+    /**
      * Check if a repository is likely an ioBroker adapter
      */
-    isLikelyIoBrokerAdapter(repo) {
+    async isLikelyIoBrokerAdapter(repo) {
         const name = repo.name.toLowerCase();
-        const description = (repo.description || '').toLowerCase();
         
-        // Primary check: name starts with "iobroker"
-        if (name.startsWith('iobroker')) {
-            return true;
+        // Primary check: name must match "ioBroker.*" pattern (case insensitive)
+        if (!this.matchesIoBrokerPattern(repo.name)) {
+            return false;
         }
         
-        // Secondary check: description mentions ioBroker AND it's likely an adapter
-        if (description.includes('iobroker') && 
-            (description.includes('adapter') || description.includes('integration'))) {
-            return true;
+        // Secondary check: must contain io-package.json file
+        const hasIoPackage = await this.hasIoPackageJson(repo);
+        if (!hasIoPackage) {
+            console.log(`⚠️  Skipping ${repo.full_name} - missing io-package.json`);
+            return false;
         }
         
-        // Check topics for iobroker AND adapter keywords together
-        const topics = repo.topics || [];
-        const hasIoBrokerTopic = topics.some(topic => topic.includes('iobroker'));
-        const hasAdapterTopic = topics.some(topic => topic.includes('adapter'));
-        
-        if (hasIoBrokerTopic && hasAdapterTopic) {
-            return true;
-        }
-        
-        return false;
+        return true;
     }
 
     /**
