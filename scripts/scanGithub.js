@@ -438,7 +438,7 @@ class GitHubScanner {
         //const name = repoName.toLowerCase();
         // Must match "iobroker." followed by something (not just "iobroker")
         //return name.startsWith('iobroker.') && name.length > 9; // 9 = "iobroker.".length
-        return repoName.match(/^iobroker\.[a-zA-Z0-0-_]$/i);
+        return repoName.match(/^iobroker\.[a-zA-Z0-9-_]+$/i);
     }
 
     /**
